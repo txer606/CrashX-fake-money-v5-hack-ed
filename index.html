@@ -252,6 +252,8 @@ if('serviceWorker'in navigator&&location.protocol!=='file:'){
 const fmt=n=>'$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const r2=n=>Math.round(n*100)/100;
+const profitOf=p=>p.bal-(p.start??p.bal);
+const rankPlayers=(a,b)=>(profitOf(b[1])-profitOf(a[1]))||(b[1].bal-a[1].bal);
 let uid=localStorage.cx_uid||(localStorage.cx_uid='u'+Math.random().toString(36).slice(2,10));
 let off=0,code=null,room=null,wallet=+localStorage.cx_wallet||20000,lock='',hostCp=null,unR=null,tab='bets',sent={};
 let spec=false,outShown=false;
@@ -402,7 +404,7 @@ function soloTick(){
   }
  }
 }
-function soloFinish(early){const ps=Object.entries(room.players).sort((a,b)=>b[1].bal-a[1].bal),w=ps[0],fin={};let pot=0;
+function soloFinish(early){const ps=Object.entries(room.players).sort(rankPlayers),w=ps[0],fin={};let pot=0;
  ps.forEach(([id,p],i)=>{if(i){const t=Math.floor(p.bal/2*100)/100;fin[id]=r2(p.bal-t);pot+=t}});
  let bonus=0;if(early&&w[0]===uid)bonus=r2(w[1].bal*BUST_BONUS);
  fin[w[0]]=r2(w[1].bal+pot+bonus);
@@ -440,13 +442,23 @@ function finishVote(){if(lock==='v'||!room||room.status!=='voting')return;lock='
  const m=+Object.keys(c).sort((a,b)=>c[b]-c[a]||a-b)[0]||5;
  update(ref(db,rp()),{status:'playing',duration:m,endAt:now()+m*60000,round:{id:1,phase:'bet',until:now()+BET_MS}})}
 
-/* ---------- host-run game loop ---------- */
+/* ---------- host-run game loop (معدل لكتابة hostCp مسبقاً) ---------- */
 const mult=r=>!r?1:r.phase==='fly'?Math.max(1,Math.exp(K*(now()-r.startAt))):r.phase==='crash'?r.at:1;
 setInterval(()=>{const r=room&&room.round;if(!room||solo||room.host!==uid||room.status!=='playing'||!r)return;
  checkElim();if(!room||room.status!=='playing')return;
  const k=r.id+r.phase;
- if(r.phase==='bet'&&now()>=r.until&&lock!==k){lock=k;hostCp=genCp(97,500);update(ref(db,rp()+'round'),{phase:'fly',startAt:now()})}
- else if(r.phase==='fly'&&lock!==k){if(hostCp==null)hostCp=MIN_CRASH;if(mult(r)>=hostCp){lock=k;crash(r)}}
+ if(r.phase==='bet'&&now()>=r.until&&lock!==k){
+   lock=k;
+   hostCp=genCp(97,500);
+   // ✅ كتابة crash point مسبقاً في Firebase
+   update(ref(db,rp()+'round'),{phase:'fly',startAt:now(),hostCp:hostCp});
+ }
+ else if(r.phase==='fly'&&lock!==k){
+   if(hostCp==null)hostCp=MIN_CRASH;
+   // ✅ قراءة hostCp من Firebase إذا تم تعديله من الإضافة
+   if(r.hostCp && r.hostCp !== hostCp){hostCp=r.hostCp;}
+   if(mult(r)>=hostCp){lock=k;crash(r)}
+ }
  else if(r.phase==='crash'&&now()>=r.until&&lock!==k){lock=k;if(now()>=room.endAt)finish(false);else update(ref(db,rp()),{round:{id:r.id+1,phase:'bet',until:now()+BET_MS},bets:null})}
 },100);
 function checkElim(){const ps=room.players||{};const u={};let changed=false,alive=0,total=0;
@@ -459,7 +471,7 @@ function crash(r){const cp=hostCp;hostCp=null;const u={},b=room.bets||{},ps=room
  for(const id in b){let g=0;for(const k in b[id]){const x=b[id][k];if(x.co&&x.co<=cp)g+=x.amt*x.co}if(g&&ps[id])u['players/'+id+'/bal']=r2(ps[id].bal+g)}
  u.round={id:r.id,phase:'crash',at:cp,startAt:r.startAt,until:now()+CRASH_MS};u['hist/r'+r.id]=cp;update(ref(db,rp()),u)}
 function finish(early){if(lock==='fin'||!room||room.status!=='playing')return;lock='fin';
- const ps=Object.entries(room.players||{}).sort((a,b)=>b[1].bal-a[1].bal),w=ps[0],fin={};let pot=0;
+ const ps=Object.entries(room.players||{}).sort(rankPlayers),w=ps[0],fin={};let pot=0;
  ps.forEach(([id,p],i)=>{if(i){const t=Math.floor(p.bal/2*100)/100;fin[id]=r2(p.bal-t);pot+=t}});
  let bonus=0;if(early&&w)bonus=r2(w[1].bal*BUST_BONUS);
  fin[w[0]]=r2(w[1].bal+pot+bonus);
@@ -510,7 +522,7 @@ function lists(){if(!room)return;const r=room.round||{},b=room.bets||{},ps=room.
  if(tab==='bets'){for(const id in b)for(const k in b[id]){const x=b[id][k],won=x.co&&(r.phase!=='crash'||x.co<=r.at),lost=r.phase==='crash'&&!won;n++;tot+=x.amt;
   h+=`<div class="row"><span>${esc((ps[id]||{}).name||'?')}</span><span>${x.co?x.co.toFixed(2)+'x':''}</span><b class="${won?'g':lost?'r':''}">${won?'+'+fmt(x.amt*(x.co-1)):lost?'&#8722;'+fmt(x.amt):fmt(x.amt)}</b></div>`}
   h=`<div class="row" style="color:var(--mu)"><span>${n} bets</span><span></span><b>${fmt(tot)}</b></div>`+h}
- else h=Object.values(ps).sort((a,b)=>b.bal-a.bal).map((p,i)=>`<div class="row"><span>${i+1}. ${esc(p.name)}${p.out?' <b style="color:var(--rd);font-size:11px">OUT</b>':''}</span><span></span><b>${fmt(p.bal)}</b></div>`).join('');
+ else h=Object.values(ps).sort((a,b)=>profitOf(b)-profitOf(a)||b.bal-a.bal).map((p,i)=>`<div class="row"><span>${i+1}. ${esc(p.name)}${p.out?' <b style="color:var(--rd);font-size:11px">OUT</b>':''}</span><span></span><b>${fmt(p.bal)}</b></div>`).join('');
  E('lst').innerHTML=h}
 function showRes(){const rs=room.result,ps=room.players,w=ps[rs.winner],el=E('res');el.classList.remove('hide');
  el.innerHTML=`<div class="card"><svg class="trophy" viewBox="0 0 64 64" width="76" height="76"><defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3b85a"/><stop offset="1" stop-color="#c58f2e"/></linearGradient></defs>
