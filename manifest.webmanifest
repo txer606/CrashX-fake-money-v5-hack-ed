@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "Crash X",
+  "short_name": "Crash X",
+  "description": "A multiplayer crash game with play money. Play solo against bots, even offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icons/crashx-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/crashx-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/crashx-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/crashx.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
