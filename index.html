@@ -336,7 +336,9 @@ function drawSolo(){const d=DIFFS[soloDiff];
 E('soloBtn').onclick=()=>{sfxTick();drawSolo();show('solo')};
 E('lvs').onclick=()=>show('menu');
 E('gosolo').onclick=()=>{sfxBet();startSolo()};
-function startSolo(){const d=DIFFS[soloDiff],n=gname(),ps={[uid]:{name:n,bal:20000,start:20000}};
+function startSolo(){
+ if(wallet<MIN){toast('Your wallet is empty','#e5575f');return}
+ const d=DIFFS[soloDiff],n=gname(),ps={[uid]:{name:n,bal:wallet,start:wallet}};
  BOTNAMES.slice(0,d.n).forEach(bn=>{ps['bot_'+bn.toLowerCase()]={name:bn,bal:20000,start:20000}});
  solo=true;code=null;sent={};lastRound=-1;lastCrashId=-1;lastEnd=false;spec=false;outShown=false;E('out').classList.add('hide');
  room={host:uid,status:'playing',duration:soloLen,endAt:now()+soloLen*60000,round:{id:1,phase:'bet',until:now()+BET_MS},bets:{},players:ps,hist:{}};
